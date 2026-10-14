@@ -75,6 +75,47 @@
       padding: 4px 14px;
     }
 
+    .picker {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .picker-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 13px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 600;
+    }
+
+    .picker-body {
+      border-top: 1px solid var(--line);
+      padding: 10px 14px 6px;
+    }
+
+    .picker-list {
+      max-height: 240px;
+      overflow-y: auto;
+      margin-top: 6px;
+    }
+
+    .badge {
+      font-size: .82rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-left: 8px;
+    }
+
+    .badge.active {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
     .row {
       display: flex;
       align-items: center;
@@ -111,6 +152,7 @@
     input[type=email],
     input[type=password],
     input[type=number],
+    input[type=search],
     textarea {
       width: 100%;
       padding: 11px 12px;
@@ -269,6 +311,8 @@
       session: null, tab: "spesa", loading: false, error: "", info: "",
       ricette: [], ingredienti: [], extra: [],
       selR: new Set(), selE: new Set(),
+      openR: false, openE: false,
+      qR: "", qE: "",
       lista: null, done: new Set(),
       editing: null,
     };
@@ -295,7 +339,6 @@
     function nomeRicetta(id) { return (S.ricette.find(r => r.id === id) || {}).nome || ""; }
 
     // ---------- generazione lista ----------
-    // Ingredienti presenti nelle ricette ma da non inserire mai nella lista della spesa
     const ESCLUSI_SPESA = new Set([
       "olio", "olio evo", "olio d'oliva", "olio di oliva",
       "olio extravergine", "olio extravergine d'oliva", "olio extravergine di oliva",
@@ -333,14 +376,11 @@
         if (nq !== null) o.q = (o.q || 0) + nq;
         o.from.add(from);
       };
-      for (const ing of S.ingredienti) {
-        if (S.selR.has(ing.ricetta_id) && !isEscluso(ing.nome)) {
+      for (const ing of S.ingredienti)
+        if (S.selR.has(ing.ricetta_id) && !isEscluso(ing.nome))
           add(ing.nome, ing.quantita, ing.unita, nomeRicetta(ing.ricetta_id));
-        }
-      }
-      for (const x of S.extra) {
+      for (const x of S.extra)
         if (S.selE.has(x.id)) add(x.nome, null, "", "extra");
-      }
       return [...map.values()].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
     }
     function listaTesto() {
@@ -413,12 +453,16 @@
       await load();
     }
 
-    async function aggiungiExtra(nome) {
+    async function aggiungiExtra(nome, autoSelect = false) {
       nome = nome.trim();
       if (!nome) return;
-      const { error } = await sb.from("extra").insert({ nome });
+      const { data, error } = await sb.from("extra").insert({ nome }).select().single();
       if (error) throw error;
       await load();
+      if (autoSelect && data && data.id) {
+        S.selE.add(data.id);
+        saveSel();
+      }
     }
     async function eliminaExtra(id) {
       const { error } = await sb.from("extra").delete().eq("id", id);
@@ -467,37 +511,119 @@
     function viewSpesa() {
       const out = [el("h1", {}, "Lista della spesa")];
 
-      out.push(el("h2", {}, "Ricette"));
-      if (!S.ricette.length) out.push(el("div", { class: "empty" }, "Nessuna ricetta: aggiungine una dalla scheda Ricette."));
-      else out.push(el("div", { class: "card" }, S.ricette.map(r =>
-        el("div", { class: "row" },
-          el("label", {},
-            el("input", {
-              type: "checkbox", checked: S.selR.has(r.id), onchange: e => {
-                e.target.checked ? S.selR.add(r.id) : S.selR.delete(r.id); saveSel();
-              }
-            }),
-            el("span", {}, r.nome))))));
+      // --- Sezione Ricette (comprimibile con ricerca) ---
+      const badgeR = el("span", { class: "badge" + (S.selR.size ? " active" : "") },
+        S.selR.size ? `${S.selR.size} selezionat${S.selR.size === 1 ? "a" : "e"}` : `${S.ricette.length}`);
+      const listR = el("div", { class: "picker-list" });
 
-      out.push(el("h2", {}, "Extra"));
-      if (!S.extra.length) out.push(el("div", { class: "empty" }, "Nessun extra: aggiungili dalla scheda Extra."));
-      else out.push(el("div", { class: "card" }, S.extra.map(x =>
-        el("div", { class: "row" },
-          el("label", {},
-            el("input", {
-              type: "checkbox", checked: S.selE.has(x.id), onchange: e => {
-                e.target.checked ? S.selE.add(x.id) : S.selE.delete(x.id); saveSel();
-              }
-            }),
-            el("span", {}, x.nome))))));
+      const updateListR = () => {
+        listR.replaceChildren();
+        if (!S.ricette.length) {
+          listR.append(el("div", { class: "empty" }, "Nessuna ricetta: aggiungine una dalla scheda Ricette."));
+          return;
+        }
+        const q = S.qR.trim().toLowerCase();
+        const filtered = S.ricette.filter(r => r.nome.toLowerCase().includes(q));
+        if (!filtered.length) {
+          listR.append(el("div", { class: "empty" }, "Nessuna ricetta trovata."));
+          return;
+        }
+        filtered.forEach(r => {
+          listR.append(el("div", { class: "row" },
+            el("label", {},
+              el("input", {
+                type: "checkbox", checked: S.selR.has(r.id), onchange: e => {
+                  e.target.checked ? S.selR.add(r.id) : S.selR.delete(r.id);
+                  saveSel();
+                  badgeR.className = "badge" + (S.selR.size ? " active" : "");
+                  badgeR.textContent = S.selR.size ? `${S.selR.size} selezionat${S.selR.size === 1 ? "a" : "e"}` : `${S.ricette.length}`;
+                }
+              }),
+              el("span", {}, r.nome))));
+        });
+      };
+
+      const searchR = el("input", {
+        type: "search", placeholder: "Cerca ricetta...", value: S.qR,
+        oninput: e => { S.qR = e.target.value; updateListR(); }
+      });
+      if (S.openR) updateListR();
+
+      out.push(el("div", { class: "picker" },
+        el("div", { class: "picker-head", onclick: () => { S.openR = !S.openR; render(); } },
+          el("div", {}, "Ricette", badgeR),
+          el("span", { class: "sub" }, S.openR ? "▴" : "▾")),
+        S.openR && el("div", { class: "picker-body" }, searchR, listR)
+      ));
+
+      // --- Sezione Extra (comprimibile con ricerca + aggiunta rapida) ---
+      const badgeE = el("span", { class: "badge" + (S.selE.size ? " active" : "") },
+        S.selE.size ? `${S.selE.size} selezionat${S.selE.size === 1 ? "o" : "i"}` : `${S.extra.length}`);
+      const listE = el("div", { class: "picker-list" });
+
+      const updateListE = () => {
+        listE.replaceChildren();
+        const rawQ = S.qE.trim();
+        const q = rawQ.toLowerCase();
+        const filtered = S.extra.filter(x => x.nome.toLowerCase().includes(q));
+
+        if (!S.extra.length && !rawQ) {
+          listE.append(el("div", { class: "empty" }, "Nessun extra: cerca qui sopra per aggiungerne uno."));
+          return;
+        }
+
+        filtered.forEach(x => {
+          listE.append(el("div", { class: "row" },
+            el("label", {},
+              el("input", {
+                type: "checkbox", checked: S.selE.has(x.id), onchange: e => {
+                  e.target.checked ? S.selE.add(x.id) : S.selE.delete(x.id);
+                  saveSel();
+                  badgeE.className = "badge" + (S.selE.size ? " active" : "");
+                  badgeE.textContent = S.selE.size ? `${S.selE.size} selezionat${S.selE.size === 1 ? "o" : "i"}` : `${S.extra.length}`;
+                }
+              }),
+              el("span", {}, x.nome))));
+        });
+
+        // Se la ricerca non produce risultati (o non esiste corrispondenza esatta), mostra il pulsante "Aggiungi <nome_extra>"
+        const exactMatch = S.extra.some(x => x.nome.trim().toLowerCase() === q);
+        if (rawQ && !exactMatch) {
+          listE.append(
+            el("div", { style: "padding: 10px 0 4px" },
+              el("button", {
+                class: "small",
+                style: "width: 100%",
+                onclick: () => run(async () => {
+                  await aggiungiExtra(rawQ, true);
+                  S.qE = "";
+                }, `"${rawQ}" aggiunto e selezionato.`)
+              }, `+ Aggiungi "${rawQ}"`))
+          );
+        }
+      };
+
+      const searchE = el("input", {
+        type: "search", placeholder: "Cerca o aggiungi extra...", value: S.qE,
+        oninput: e => { S.qE = e.target.value; updateListE(); }
+      });
+      if (S.openE) updateListE();
+
+      out.push(el("div", { class: "picker" },
+        el("div", { class: "picker-head", onclick: () => { S.openE = !S.openE; render(); } },
+          el("div", {}, "Extra", badgeE),
+          el("span", { class: "sub" }, S.openE ? "▴" : "▾")),
+        S.openE && el("div", { class: "picker-body" }, searchE, listE)
+      ));
 
       out.push(el("div", { class: "actions" },
-        el("button", { onclick: () => { S.lista = genera(); S.done = new Set(); render(); window.scrollTo(0, document.body.scrollHeight); } }, "Genera lista"),
+        el("button", { onclick: () => { S.lista = genera(); S.done = new Set(); S.openR = false; S.openE = false; render(); window.scrollTo(0, document.body.scrollHeight); } }, "Genera lista"),
         el("button", { class: "ghost", onclick: () => { S.selR.clear(); S.selE.clear(); S.lista = null; saveSel(); render(); } }, "Deseleziona tutto")));
 
       if (S.lista) {
-        out.push(el("div", { class: "top" }, el("h2", {}, `Da comprare (${S.lista.length})`),
-          S.lista.length ? el("button", { class: "ghost small", onclick: copia }, "Copia") : null));
+        const restanti = S.lista.filter(o => !S.done.has(o.key)).length;
+        out.push(el("div", { class: "top" }, el("h2", {}, `Da comprare (${restanti})`),
+          restanti ? el("button", { class: "ghost small", onclick: copia }, "Copia") : null));
         if (!S.lista.length) out.push(el("div", { class: "empty" }, "Seleziona almeno una ricetta o un extra."));
         else out.push(el("div", { class: "card" }, S.lista.map(o =>
           el("div", { class: "row" + (S.done.has(o.key) ? " done" : "") },
