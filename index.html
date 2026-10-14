@@ -295,6 +295,21 @@
     function nomeRicetta(id) { return (S.ricette.find(r => r.id === id) || {}).nome || ""; }
 
     // ---------- generazione lista ----------
+    // Ingredienti presenti nelle ricette ma da non inserire mai nella lista della spesa
+    const ESCLUSI_SPESA = new Set([
+      "olio", "olio evo", "olio d'oliva", "olio di oliva",
+      "olio extravergine", "olio extravergine d'oliva", "olio extravergine di oliva",
+      "sale", "sale fino", "sale grosso",
+      "pepe", "pepe nero",
+      "peperoncino",
+      "acqua"
+    ]);
+
+    function isEscluso(nome) {
+      const n = nome.trim().toLowerCase();
+      return ESCLUSI_SPESA.has(n);
+    }
+
     function norm(q, u) {
       u = (u || "").trim().toLowerCase();
       if (q === null || q === undefined) return [null, u];
@@ -318,14 +333,21 @@
         if (nq !== null) o.q = (o.q || 0) + nq;
         o.from.add(from);
       };
-      for (const ing of S.ingredienti)
-        if (S.selR.has(ing.ricetta_id)) add(ing.nome, ing.quantita, ing.unita, nomeRicetta(ing.ricetta_id));
-      for (const x of S.extra)
+      for (const ing of S.ingredienti) {
+        if (S.selR.has(ing.ricetta_id) && !isEscluso(ing.nome)) {
+          add(ing.nome, ing.quantita, ing.unita, nomeRicetta(ing.ricetta_id));
+        }
+      }
+      for (const x of S.extra) {
         if (S.selE.has(x.id)) add(x.nome, null, "", "extra");
+      }
       return [...map.values()].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
     }
     function listaTesto() {
-      return S.lista.map(o => `- ${o.nome}${o.q !== null ? " " + fmt(o.q, o.unita) : ""}`).join("\n");
+      return S.lista
+        .filter(o => !S.done.has(o.key))
+        .map(o => `- ${o.nome}${o.q !== null ? " " + fmt(o.q, o.unita) : ""}`)
+        .join("\n");
     }
 
     // ---------- azioni ----------
@@ -416,6 +438,7 @@
 
     async function copia() {
       const txt = listaTesto();
+      if (!txt) { S.info = "Nessun ingrediente da copiare."; render(); return; }
       try { await navigator.clipboard.writeText(txt); S.info = "Lista copiata."; }
       catch {
         const t = el("textarea", { value: txt }); document.body.append(t); t.select();
