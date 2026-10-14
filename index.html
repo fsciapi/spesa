@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="it">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Spesa</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Spesa">
+  <meta name="theme-color" content="#2f7d4f">
+  <style>
+    :root {
+      --bg: #f6f7f5;
+      --card: #ffffff;
+      --text: #1d2420;
+      --muted: #667069;
+      --line: #dfe4df;
+      --accent: #2f7d4f;
+      --accent-text: #ffffff;
+      --danger: #b3382c;
+      --radius: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #131815;
+        --card: #1c231f;
+        --text: #e8ece9;
+        --muted: #98a39c;
+        --line: #2c3631;
+        --accent: #4fb07a;
+        --accent-text: #0c1510;
+        --danger: #e5766a;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      padding: env(safe-area-inset-top) 16px calc(88px + env(safe-area-inset-bottom));
+    }
+
+    #app {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin: 18px 0 12px;
+    }
+
+    h2 {
+      font-size: 1.05rem;
+      margin: 20px 0 8px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 4px 14px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .row:last-child {
+      border-bottom: 0;
+    }
+
+    .row label {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
+
+    .row .sub {
+      color: var(--muted);
+      font-size: .82rem;
+    }
+
+    input[type=checkbox] {
+      width: 22px;
+      height: 22px;
+      accent-color: var(--accent);
+      flex: none;
+    }
+
+    input[type=text],
+    input[type=email],
+    input[type=password],
+    input[type=number],
+    textarea {
+      width: 100%;
+      padding: 11px 12px;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    textarea {
+      min-height: 70px;
+      resize: vertical;
+    }
+
+    button {
+      font: inherit;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 16px;
+      cursor: pointer;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 600;
+    }
+
+    button.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+      font-weight: 500;
+    }
+
+    button.danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--line);
+      font-weight: 500;
+    }
+
+    button.small {
+      padding: 7px 11px;
+      font-size: .9rem;
+    }
+
+    button:disabled {
+      opacity: .5;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 14px 0;
+    }
+
+    .ing {
+      display: grid;
+      grid-template-columns: 1fr 78px 72px 36px;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .ing button {
+      padding: 0;
+    }
+
+    .tabs {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      background: var(--card);
+      border-top: 1px solid var(--line);
+      padding-bottom: env(safe-area-inset-bottom);
+      z-index: 5;
+    }
+
+    .tabs button {
+      flex: 1;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 0;
+      padding: 14px 4px;
+      font-weight: 500;
+    }
+
+    .tabs button.on {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .err {
+      color: var(--danger);
+      margin: 10px 0;
+    }
+
+    .ok {
+      color: var(--accent);
+      margin: 10px 0;
+    }
+
+    .done span.t {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 14px 0;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ====== CONFIGURAZIONE: incolla qui i valori del tuo progetto Supabase ======
+    const SUPABASE_URL = "https://jdkamyrbjmofcllnbnjh.supabase.co/rest/v1/";
+    const SUPABASE_ANON_KEY = "sb_publishable_PrUPp6PXFnF9PCT9-jqc0Q_cbRloLfE";
+    // ===========================================================================
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const app = document.getElementById("app");
+
+    // ---------- utilità DOM ----------
+    function el(tag, props, ...kids) {
+      const e = document.createElement(tag);
+      for (const [k, v] of Object.entries(props || {})) {
+        if (v === undefined || v === null || v === false) continue;
+        if (k === "class") e.className = v;
+        else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+        else if (k === "value") e.value = v;
+        else if (k === "checked") e.checked = !!v;
+        else if (k === "disabled") e.disabled = !!v;
+        else e.setAttribute(k, v === true ? "" : v);
+      }
+      for (const kid of kids.flat()) {
+        if (kid === null || kid === undefined || kid === false) continue;
+        e.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+      }
+      return e;
+    }
+
+    // ---------- stato ----------
+    const S = {
+      session: null, tab: "spesa", loading: false, error: "", info: "",
+      ricette: [], ingredienti: [], extra: [],
+      selR: new Set(), selE: new Set(),
+      lista: null, done: new Set(),
+      editing: null,
+    };
+
+    function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }
+    function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } }
+    function saveSel() { lsSet("selR", [...S.selR]); lsSet("selE", [...S.selE]); }
+
+    // ---------- dati ----------
+    async function load() {
+      const [r, i, x] = await Promise.all([
+        sb.from("ricette").select("*").order("nome"),
+        sb.from("ingredienti").select("*").order("created_at"),
+        sb.from("extra").select("*").order("nome"),
+      ]);
+      for (const q of [r, i, x]) if (q.error) throw q.error;
+      S.ricette = r.data; S.ingredienti = i.data; S.extra = x.data;
+      // elimina dalla selezione id che non esistono più
+      const rid = new Set(S.ricette.map(a => a.id)), eid = new Set(S.extra.map(a => a.id));
+      S.selR = new Set([...S.selR].filter(id => rid.has(id)));
+      S.selE = new Set([...S.selE].filter(id => eid.has(id)));
+    }
+
+    function nomeRicetta(id) { return (S.ricette.find(r => r.id === id) || {}).nome || ""; }
+
+    // ---------- generazione lista ----------
+    function norm(q, u) {
+      u = (u || "").trim().toLowerCase();
+      if (q === null || q === undefined) return [null, u];
+      if (u === "kg") return [q * 1000, "g"];
+      if (u === "l") return [q * 1000, "ml"];
+      return [q, u];
+    }
+    function fmt(q, u) {
+      if (q === null || q === undefined) return "";
+      if (u === "g" && q >= 1000) return `${+(q / 1000).toFixed(2)} kg`;
+      if (u === "ml" && q >= 1000) return `${+(q / 1000).toFixed(2)} l`;
+      return `${+q.toFixed(2)}${u ? " " + u : ""}`;
+    }
+    function genera() {
+      const map = new Map();
+      const add = (nome, q, u, from) => {
+        const [nq, nu] = norm(q, u);
+        const key = nome.trim().toLowerCase() + "|" + nu;
+        let o = map.get(key);
+        if (!o) { o = { key, nome: nome.trim(), unita: nu, q: null, from: new Set() }; map.set(key, o); }
+        if (nq !== null) o.q = (o.q || 0) + nq;
+        o.from.add(from);
+      };
+      for (const ing of S.ingredienti)
+        if (S.selR.has(ing.ricetta_id)) add(ing.nome, ing.quantita, ing.unita, nomeRicetta(ing.ricetta_id));
+      for (const x of S.extra)
+        if (S.selE.has(x.id)) add(x.nome, null, "", "extra");
+      return [...map.values()].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+    }
+    function listaTesto() {
+      return S.lista.map(o => `- ${o.nome}${o.q !== null ? " " + fmt(o.q, o.unita) : ""}`).join("\n");
+    }
+
+    // ---------- azioni ----------
+    async function run(fn, okMsg) {
+      S.error = ""; S.info = "";
+      try { await fn(); if (okMsg) S.info = okMsg; }
+      catch (e) { S.error = e && e.message ? e.message : String(e); }
+      render();
+    }
+
+    async function login(email, password) {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+
+    function nuovaRicetta() { S.editing = { id: null, nome: "", note: "", ings: [{ nome: "", quantita: "", unita: "" }] }; render(); }
+    function modificaRicetta(r) {
+      const ings = S.ingredienti.filter(i => i.ricetta_id === r.id).map(i => ({
+        nome: i.nome, quantita: i.quantita === null ? "" : String(i.quantita), unita: i.unita || "",
+      }));
+      S.editing = { id: r.id, nome: r.nome, note: r.note || "", ings: ings.length ? ings : [{ nome: "", quantita: "", unita: "" }] };
+      render();
+    }
+
+    async function salvaRicetta() {
+      const ed = S.editing;
+      const nome = ed.nome.trim();
+      if (!nome) throw new Error("Dai un nome alla ricetta.");
+      const rows = [];
+      for (const i of ed.ings) {
+        if (!i.nome.trim()) continue;
+        let q = null;
+        if (String(i.quantita).trim() !== "") {
+          q = Number(String(i.quantita).replace(",", "."));
+          if (!Number.isFinite(q)) throw new Error(`Quantità non valida per "${i.nome}".`);
+        }
+        rows.push({ nome: i.nome.trim(), quantita: q, unita: i.unita.trim() || null });
+      }
+      let id = ed.id;
+      if (id) {
+        const { error } = await sb.from("ricette").update({ nome, note: ed.note.trim() || null }).eq("id", id);
+        if (error) throw error;
+        const del = await sb.from("ingredienti").delete().eq("ricetta_id", id);
+        if (del.error) throw del.error;
+      } else {
+        const { data, error } = await sb.from("ricette").insert({ nome, note: ed.note.trim() || null }).select().single();
+        if (error) throw error;
+        id = data.id;
+      }
+      if (rows.length) {
+        const { error } = await sb.from("ingredienti").insert(rows.map(r => ({ ...r, ricetta_id: id })));
+        if (error) throw error;
+      }
+      S.editing = null;
+      await load();
+    }
+
+    async function eliminaRicetta(id) {
+      if (!confirm("Eliminare questa ricetta?")) return;
+      const { error } = await sb.from("ricette").delete().eq("id", id);
+      if (error) throw error;
+      S.editing = null;
+      await load();
+    }
+
+    async function aggiungiExtra(nome) {
+      nome = nome.trim();
+      if (!nome) return;
+      const { error } = await sb.from("extra").insert({ nome });
+      if (error) throw error;
+      await load();
+    }
+    async function eliminaExtra(id) {
+      const { error } = await sb.from("extra").delete().eq("id", id);
+      if (error) throw error;
+      await load();
+    }
+
+    function esporta() {
+      const data = { esportato_il: new Date().toISOString(), ricette: S.ricette, ingredienti: S.ingredienti, extra: S.extra };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `spesa-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    async function copia() {
+      const txt = listaTesto();
+      try { await navigator.clipboard.writeText(txt); S.info = "Lista copiata."; }
+      catch {
+        const t = el("textarea", { value: txt }); document.body.append(t); t.select();
+        try { document.execCommand("copy"); S.info = "Lista copiata."; } catch { S.error = "Copia non riuscita."; }
+        t.remove();
+      }
+      render();
+    }
+
+    // ---------- viste ----------
+    function viewLogin() {
+      const email = el("input", { type: "email", placeholder: "Email", autocomplete: "username" });
+      const pw = el("input", { type: "password", placeholder: "Password", autocomplete: "current-password" });
+      const go = () => run(() => login(email.value.trim(), pw.value));
+      pw.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+      return [
+        el("h1", {}, "Spesa"),
+        el("div", { class: "card", style: "padding:14px" },
+          el("div", { style: "margin-bottom:10px" }, email),
+          el("div", { style: "margin-bottom:12px" }, pw),
+          el("button", { onclick: go }, "Accedi")),
+        S.error && el("div", { class: "err" }, S.error),
+      ];
+    }
+
+    function viewSpesa() {
+      const out = [el("h1", {}, "Lista della spesa")];
+
+      out.push(el("h2", {}, "Ricette"));
+      if (!S.ricette.length) out.push(el("div", { class: "empty" }, "Nessuna ricetta: aggiungine una dalla scheda Ricette."));
+      else out.push(el("div", { class: "card" }, S.ricette.map(r =>
+        el("div", { class: "row" },
+          el("label", {},
+            el("input", {
+              type: "checkbox", checked: S.selR.has(r.id), onchange: e => {
+                e.target.checked ? S.selR.add(r.id) : S.selR.delete(r.id); saveSel();
+              }
+            }),
+            el("span", {}, r.nome))))));
+
+      out.push(el("h2", {}, "Extra"));
+      if (!S.extra.length) out.push(el("div", { class: "empty" }, "Nessun extra: aggiungili dalla scheda Extra."));
+      else out.push(el("div", { class: "card" }, S.extra.map(x =>
+        el("div", { class: "row" },
+          el("label", {},
+            el("input", {
+              type: "checkbox", checked: S.selE.has(x.id), onchange: e => {
+                e.target.checked ? S.selE.add(x.id) : S.selE.delete(x.id); saveSel();
+              }
+            }),
+            el("span", {}, x.nome))))));
+
+      out.push(el("div", { class: "actions" },
+        el("button", { onclick: () => { S.lista = genera(); S.done = new Set(); render(); window.scrollTo(0, document.body.scrollHeight); } }, "Genera lista"),
+        el("button", { class: "ghost", onclick: () => { S.selR.clear(); S.selE.clear(); S.lista = null; saveSel(); render(); } }, "Deseleziona tutto")));
+
+      if (S.lista) {
+        out.push(el("div", { class: "top" }, el("h2", {}, `Da comprare (${S.lista.length})`),
+          S.lista.length ? el("button", { class: "ghost small", onclick: copia }, "Copia") : null));
+        if (!S.lista.length) out.push(el("div", { class: "empty" }, "Seleziona almeno una ricetta o un extra."));
+        else out.push(el("div", { class: "card" }, S.lista.map(o =>
+          el("div", { class: "row" + (S.done.has(o.key) ? " done" : "") },
+            el("label", {},
+              el("input", {
+                type: "checkbox", checked: S.done.has(o.key), onchange: e => {
+                  e.target.checked ? S.done.add(o.key) : S.done.delete(o.key); render();
+                }
+              }),
+              el("span", { class: "t" }, o.nome + (o.q !== null ? " — " + fmt(o.q, o.unita) : ""),
+                el("div", { class: "sub" }, [...o.from].join(", "))))))));
+      }
+      return out;
+    }
+
+    function viewRicette() {
+      if (S.editing) return viewEditor();
+      const out = [el("h1", {}, "Ricette"),
+      el("div", { class: "actions" }, el("button", { onclick: nuovaRicetta }, "+ Nuova ricetta"))];
+      if (!S.ricette.length) out.push(el("div", { class: "empty" }, "Ancora nessuna ricetta."));
+      else out.push(el("div", { class: "card" }, S.ricette.map(r => {
+        const n = S.ingredienti.filter(i => i.ricetta_id === r.id).length;
+        return el("div", { class: "row", style: "cursor:pointer", onclick: () => modificaRicetta(r) },
+          el("div", { style: "flex:1" }, el("div", {}, r.nome), el("div", { class: "sub" }, `${n} ingredienti`)),
+          el("span", { class: "sub" }, "›"));
+      })));
+      return out;
+    }
+
+    function viewEditor() {
+      const ed = S.editing;
+      const nome = el("input", { type: "text", placeholder: "Nome ricetta", value: ed.nome, oninput: e => ed.nome = e.target.value });
+      const note = el("textarea", { placeholder: "Note (facoltative)", value: ed.note, oninput: e => ed.note = e.target.value });
+      const out = [
+        el("h1", {}, ed.id ? "Modifica ricetta" : "Nuova ricetta"),
+        el("div", { style: "margin-bottom:10px" }, nome),
+        el("div", { style: "margin-bottom:6px" }, note),
+        el("h2", {}, "Ingredienti"),
+        el("div", { class: "sub", style: "margin-bottom:8px" }, "Nome · quantità · unità (g, kg, ml, l, pz...). Quantità vuota per \"q.b.\""),
+      ];
+      ed.ings.forEach((ing, idx) => {
+        out.push(el("div", { class: "ing" },
+          el("input", { type: "text", placeholder: "Ingrediente", value: ing.nome, oninput: e => ing.nome = e.target.value }),
+          el("input", { type: "text", inputmode: "decimal", placeholder: "Qtà", value: ing.quantita, oninput: e => ing.quantita = e.target.value }),
+          el("input", { type: "text", placeholder: "Unità", value: ing.unita, oninput: e => ing.unita = e.target.value }),
+          el("button", {
+            class: "danger", "aria-label": "Rimuovi ingrediente", onclick: () => {
+              ed.ings.splice(idx, 1); if (!ed.ings.length) ed.ings.push({ nome: "", quantita: "", unita: "" }); render();
+            }
+          }, "×")));
+      });
+      out.push(el("div", { class: "actions" },
+        el("button", { class: "ghost", onclick: () => { ed.ings.push({ nome: "", quantita: "", unita: "" }); render(); } }, "+ Ingrediente")));
+      out.push(el("div", { class: "actions" },
+        el("button", { onclick: () => run(salvaRicetta, "Ricetta salvata.") }, "Salva"),
+        el("button", { class: "ghost", onclick: () => { S.editing = null; render(); } }, "Annulla"),
+        ed.id ? el("button", { class: "danger", onclick: () => run(() => eliminaRicetta(ed.id)) }, "Elimina") : null));
+      return out;
+    }
+
+    function viewExtra() {
+      const inp = el("input", { type: "text", placeholder: "Es. Coca Cola" });
+      const add = () => run(async () => { await aggiungiExtra(inp.value); });
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+      const out = [el("h1", {}, "Extra"),
+      el("div", { class: "sub", style: "margin-bottom:10px" }, "Prodotti che non stanno in nessuna ricetta ma che vuoi poter aggiungere alla spesa."),
+      el("div", { class: "ing", style: "grid-template-columns:1fr auto" }, inp, el("button", { onclick: add }, "Aggiungi"))];
+      if (!S.extra.length) out.push(el("div", { class: "empty" }, "Nessun extra."));
+      else out.push(el("div", { class: "card" }, S.extra.map(x =>
+        el("div", { class: "row" }, el("span", { style: "flex:1" }, x.nome),
+          el("button", { class: "danger small", onclick: () => run(() => eliminaExtra(x.id)) }, "Elimina")))));
+      out.push(el("h2", {}, "Dati"));
+      out.push(el("div", { class: "actions" },
+        el("button", { class: "ghost", onclick: esporta }, "Esporta JSON"),
+        el("button", { class: "ghost", onclick: () => sb.auth.signOut() }, "Esci")));
+      return out;
+    }
+
+    function render() {
+      app.replaceChildren();
+      if (!S.session) { app.append(...viewLogin().filter(Boolean)); return; }
+      const v = { spesa: viewSpesa, ricette: viewRicette, extra: viewExtra }[S.tab]();
+      app.append(...v.filter(Boolean));
+      if (S.error) app.append(el("div", { class: "err" }, S.error));
+      if (S.info) app.append(el("div", { class: "ok" }, S.info));
+      const tab = (id, label) => el("button", {
+        class: S.tab === id ? "on" : "", onclick: () => {
+          S.tab = id; S.error = ""; S.info = ""; S.editing = null; render(); window.scrollTo(0, 0);
+        }
+      }, label);
+      app.append(el("nav", { class: "tabs" }, tab("spesa", "Spesa"), tab("ricette", "Ricette"), tab("extra", "Extra")));
+    }
+
+    // ---------- avvio ----------
+    async function start() {
+      S.selR = new Set(lsGet("selR", [])); S.selE = new Set(lsGet("selE", []));
+      if (SUPABASE_URL.startsWith("INCOLLA")) {
+        app.append(el("h1", {}, "Configurazione mancante"),
+          el("p", {}, "Apri index.html e inserisci Project URL e chiave anon di Supabase (vedi README)."));
+        return;
+      }
+      sb.auth.onAuthStateChange(async (_evt, session) => {
+        S.session = session;
+        if (session) { try { await load(); } catch (e) { S.error = e.message || String(e); } }
+        else { S.ricette = []; S.ingredienti = []; S.extra = []; S.lista = null; }
+        render();
+      });
+      const { data } = await sb.auth.getSession();
+      S.session = data.session;
+      if (S.session) { try { await load(); } catch (e) { S.error = e.message || String(e); } }
+      render();
+    }
+    start();
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => { }));
+    }
+  </script>
+</body>
+
+</html>
